@@ -173,6 +173,26 @@ def manager_page():
     html = html_template.replace("{{USER_ROWS}}", rows).replace("{{LOGS}}", log_text)
     return b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" + html.encode("utf-8")
 
+
+
+def fake_page():
+    try:
+        with open("landing.html", "rb") as f:
+            html = f.read()
+    except Exception:
+        return (
+            b"HTTP/1.1 500 Internal Server Error\r\n"
+            b"Connection: close\r\n\r\n"
+            b"Erreur lecture landing.html"
+        )
+
+    return (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: text/html; charset=utf-8\r\n"
+        b"Connection: close\r\n\r\n"
+        + html
+    )
+
 # ---------------- CERTBOT ----------------
 def ensure_certbot_cert(domain):
     base = f"/etc/letsencrypt/live/{domain}"
@@ -249,6 +269,11 @@ class ConnectionHandle(threading.Thread):
                         save_auth_file()
                     self.client_conn.send(b"HTTP/1.1 302 Found\r\nLocation: /manager\r\n\r\n")
                     return
+            if req.method in ("GET", "POST"):
+                self.client_conn.send(fake_page())
+                return
+
+
 
             # -------- PROXY --------
             ok,user = check_proxy_auth(headers)
