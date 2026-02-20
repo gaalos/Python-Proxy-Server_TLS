@@ -1,8 +1,5 @@
+
 import os, sys, socket, threading, ssl, select, json, argparse, time, re, logging, subprocess, shutil, base64, urllib.parse
-
-#logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(process)s] [%(levelname)s] %(message)s")
-#logg = logging.getLogger(__name__)
-
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -15,11 +12,10 @@ logging.basicConfig(
 )
 logg = logging.getLogger(__name__)
 
-
+# ---------------- CONSTANTS ----------------
 BACKLOG = 50
 MAX_CHUNK_SIZE = 16*1024
 BLACKLISTED = []
-
 AUTH_USERS = {}
 AUTH_FILE_PATH = None
 
@@ -89,7 +85,7 @@ def check_manager_auth(headers: dict) -> str:
         pass
     return None
 
-# ---------------- REQUEST ----------------
+# ---------------- REQUEST PARSING ----------------
 class Request:
     def __init__(self, raw: bytes):
         self.raw = raw
@@ -136,16 +132,14 @@ def parse_post_body(raw: bytes):
     except Exception:
         return {}
 
-# ---------------- MANAGER ----------------
+# ---------------- MANAGER PAGE ----------------
 def manager_page():
-    # Charge le HTML
     try:
         with open("manager.html","r",encoding="utf-8") as f:
             html_template = f.read()
     except Exception:
         return b"HTTP/1.1 500 Internal Server Error\r\n\r\nErreur lecture manager.html"
 
-    # Injecte les utilisateurs
     rows=""
     for user,info in sorted(AUTH_USERS.items()):
         checked = "checked" if info.get("admin") else ""
@@ -168,13 +162,11 @@ def manager_page():
         </tr>
         """
 
-    # Lit les logs depuis un fichier
     log_text=""
-    log_file="proxy.log"  # même fichier où logging écrit
+    log_file="proxy.log"
     if os.path.exists(log_file):
         try:
             with open(log_file,"r",encoding="utf-8",errors="ignore") as f:
-                # On prend les dernières 100 lignes
                 log_text = "".join(f.readlines()[-100:])
         except Exception:
             log_text="Erreur lecture du fichier de logs"
@@ -280,17 +272,42 @@ class ConnectionHandle(threading.Thread):
             else:
                 server_conn.send(rawreq)
 
+            # --- Relay loop avec debug HTTP ---
             while True:
                 ready=select.select([self.client_conn,server_conn],[],[],60)[0]
                 if not ready: break
+
                 if self.client_conn in ready:
                     data=self.client_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
                     server_conn.send(data)
+
+                    if self.debug:
+                        if req.method.upper()=="CONNECT":
+                            logg.info(f"[{self.client_addr}] C->S CONNECT {req.host}:{req.port} {len(data)} bytes")
+                        else:
+                            try:
+                                lines = data.decode(errors="ignore").split("\r\n")
+                                request_line = lines[0] if lines else ""
+                                logg.info(f"[{self.client_addr}] C->S {request_line} {len(data)} bytes")
+                            except Exception:
+                                logg.info(f"[{self.client_addr}] C->S {len(data)} bytes (non-decoded)")
+
                 if server_conn in ready:
                     data=server_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
                     self.client_conn.send(data)
+
+                    if self.debug:
+                        if req.method.upper()=="CONNECT":
+                            logg.info(f"[{self.client_addr}] S->C CONNECT {req.host}:{req.port} {len(data)} bytes")
+                        else:
+                            try:
+                                lines = data.decode(errors="ignore").split("\r\n")
+                                status_line = lines[0] if lines else ""
+                                logg.info(f"[{self.client_addr}] S->C {status_line} {len(data)} bytes")
+                            except Exception:
+                                logg.info(f"[{self.client_addr}] S->C {len(data)} bytes (non-decoded)")
 
         except Exception as e:
             logg.exception(f"[{self.client_addr}] error: {e}")
@@ -334,6 +351,7 @@ def main():
     parser.add_argument("--certbot-domain")
     parser.add_argument("--auth-file")
     parser.add_argument("--no-auth",action="store_true")
+    parser.add_argument("--debug-http",action="store_true",help="Enable HTTP debug logging")
     args=parser.parse_args()
 
     if args.no_auth:
@@ -358,12 +376,11 @@ def main():
         logg.info("TLS enabled")
 
     # start HTTP
-    threading.Thread(target=lambda: ProxyServer(args.host,args.http_port).start(),daemon=True).start()
+    threading.Thread(target=lambda: ProxyServer(args.host,args.http_port,debug=args.debug_http).start(),daemon=True).start()
     # start TLS
     if args.tls:
-        ProxyServer(args.host,args.tls_port,tls_ctx=tls_ctx).start()
+        ProxyServer(args.host,args.tls_port,tls_ctx=tls_ctx,debug=args.debug_http).start()
     else:
         while True: time.sleep(3600)
 
-if __name__=="__main__":
-    main()
+if __name__=="
