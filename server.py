@@ -1,7 +1,20 @@
 import os, sys, socket, threading, ssl, select, json, argparse, time, re, logging, subprocess, shutil, base64, urllib.parse
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(process)s] [%(levelname)s] %(message)s")
+#logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(process)s] [%(levelname)s] %(message)s")
+#logg = logging.getLogger(__name__)
+
+
+# ---------------- LOGGING ----------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(process)s] [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("proxy.log", encoding="utf-8"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logg = logging.getLogger(__name__)
+
 
 BACKLOG = 50
 MAX_CHUNK_SIZE = 16*1024
@@ -125,13 +138,14 @@ def parse_post_body(raw: bytes):
 
 # ---------------- MANAGER ----------------
 def manager_page():
-    # charge HTML séparé
+    # Charge le HTML
     try:
         with open("manager.html","r",encoding="utf-8") as f:
             html_template = f.read()
     except Exception:
         return b"HTTP/1.1 500 Internal Server Error\r\n\r\nErreur lecture manager.html"
 
+    # Injecte les utilisateurs
     rows=""
     for user,info in sorted(AUTH_USERS.items()):
         checked = "checked" if info.get("admin") else ""
@@ -153,7 +167,19 @@ def manager_page():
             </td>
         </tr>
         """
-    html = html_template.replace("{{USER_ROWS}}", rows)
+
+    # Lit les logs depuis un fichier
+    log_text=""
+    log_file="proxy.log"  # même fichier où logging écrit
+    if os.path.exists(log_file):
+        try:
+            with open(log_file,"r",encoding="utf-8",errors="ignore") as f:
+                # On prend les dernières 100 lignes
+                log_text = "".join(f.readlines()[-100:])
+        except Exception:
+            log_text="Erreur lecture du fichier de logs"
+
+    html = html_template.replace("{{USER_ROWS}}", rows).replace("{{LOGS}}", log_text)
     return b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n" + html.encode("utf-8")
 
 # ---------------- CERTBOT ----------------

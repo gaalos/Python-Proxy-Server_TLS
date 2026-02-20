@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Proxy Manager/title>
+<title>Proxy Manager - Fallout Style</title>
 <style>
 body {background:black;color:#00FF00;font-family:monospace;padding:20px;}
 h1 {text-shadow:0 0 5px #00FF00;}
@@ -13,7 +13,17 @@ button {background:black;color:#00FF00;border:1px solid #00FF00;padding:3px 6px;
 button:hover {background:#003300;}
 input {background:black;color:#00FF00;border:1px solid #00FF00;font-family:monospace;padding:2px 5px;}
 form {margin:0;}
+.logs-container {
+    border:1px solid #00FF00;
+    height:300px;
+    overflow-y:scroll;
+    padding:10px;
+    margin-top:20px;
+    background:#001100;
+    white-space:pre-wrap;
+}
 </style>
+<meta http-equiv="refresh" content="3">
 </head>
 <body>
 <pre class="goat">
@@ -26,7 +36,9 @@ form {margin:0;}
     \         /
      '-.___.-'
 </pre>
+
 <h1>Proxy Manager</h1>
+
 <h2>Ajouter un utilisateur</h2>
 <form method="POST" action="/manager/add">
 Nom d'utilisateur: <input name="username" required><br><br>
@@ -34,10 +46,16 @@ Mot de passe: <input name="password" type="password" required><br><br>
 Admin: <input type="checkbox" name="admin" value="1"><br><br>
 <button type="submit">Ajouter</button>
 </form>
+
 <h2>Utilisateurs existants</h2>
 <table>
 <tr><th>Utilisateur</th><th>Supprimer</th><th>Admin</th></tr>
 {{USER_ROWS}}
 </table>
+
+<h2>Logs de l'application</h2>
+<div class="logs-container">
+{{LOGS}}
+</div>
 </body>
 </html>
