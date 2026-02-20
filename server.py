@@ -267,30 +267,34 @@ class ConnectionHandle(threading.Thread):
                 return
 
             if req.method.upper()=="CONNECT":
-                # Auth déjà validée => envoyer 200 Connection Established
                 self.client_conn.send(StaticResponse.connection_established)
-
             else:
-                server_conn.send(rawreq)
+                server_conn.sendall(rawreq)
 
-            # --- Relay loop TLS-safe ---
+            # --- Relay loop avec debug complet (serveur + port + URL) ---
             while True:
-                ready=select.select([self.client_conn,server_conn],[],[],60)[0]
+                ready = select.select([self.client_conn, server_conn], [], [], 60)[0]
                 if not ready: break
 
+                url = f"{req.host}:{req.port}{req.path}" if req.path else f"{req.host}:{req.port}"
+
                 if self.client_conn in ready:
-                    data=self.client_conn.recv(MAX_CHUNK_SIZE)
+                    data = self.client_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
                     server_conn.sendall(data)
                     if self.debug:
-                        logg.info(f"[{self.client_addr}] C->S {len(data)} bytes")
+                        logg.info(f"[{self.client_addr}] C->S {req.method} {url} {len(data)} bytes")
+                    else:
+                        logg.info(f"[{self.client_addr}] C->S {url}")
 
                 if server_conn in ready:
-                    data=server_conn.recv(MAX_CHUNK_SIZE)
+                    data = server_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
                     self.client_conn.sendall(data)
                     if self.debug:
-                        logg.info(f"[{self.client_addr}] S->C {len(data)} bytes")
+                        logg.info(f"[{self.client_addr}] S->C {req.method} {url} {len(data)} bytes")
+                    else:
+                        logg.info(f"[{self.client_addr}] S->C {url}")
 
         except Exception as e:
             logg.exception(f"[{self.client_addr}] error: {e}")
