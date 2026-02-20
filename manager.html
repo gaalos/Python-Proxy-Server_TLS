@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Proxy Manager/title>
+<style>
+body {background:black;color:#00FF00;font-family:monospace;padding:20px;}
+h1 {text-shadow:0 0 5px #00FF00;}
+pre.goat {font-size:12px;line-height:1.1;}
+table {border-collapse:collapse;margin-top:20px;width:60%;}
+td,th {padding:5px 10px;border:1px solid #00FF00;}
+button {background:black;color:#00FF00;border:1px solid #00FF00;padding:3px 6px;cursor:pointer;font-family:monospace;}
+button:hover {background:#003300;}
+input {background:black;color:#00FF00;border:1px solid #00FF00;font-family:monospace;padding:2px 5px;}
+form {margin:0;}
+</style>
+</head>
+<body>
+<pre class="goat">
+       ___
+     .-"   "-.
+    /         \
+    |  .--.  .-|
+    | (o_o )(o_)
+    |  '--'  |
+    \         /
+     '-.___.-'
+</pre>
+<h1>Proxy Manager</h1>
+<h2>Ajouter un utilisateur</h2>
+<form method="POST" action="/manager/add">
+Nom d'utilisateur: <input name="username" required><br><br>
+Mot de passe: <input name="password" type="password" required><br><br>
+Admin: <input type="checkbox" name="admin" value="1"><br><br>
+<button type="submit">Ajouter</button>
+</form>
+<h2>Utilisateurs existants</h2>
+<table>
+<tr><th>Utilisateur</th><th>Supprimer</th><th>Admin</th></tr>
+{{USER_ROWS}}
+</table>
+</body>
+</html>

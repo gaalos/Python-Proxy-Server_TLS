@@ -1,0 +1,18 @@
+{
+  "alice": {
+    "password": "zoro",
+    "admin": true
+  },
+  "bob": {
+    "password": "1234",
+    "admin": false
+  },
+  "hugo": {
+    "password": "monster",
+    "admin": false
+  },
+  "jean": {
+    "password": "pomme",
+    "admin": true
+  }
+}
