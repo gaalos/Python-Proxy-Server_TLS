@@ -1,8 +1,4 @@
-import os, sys, socket, threading, ssl, select, json, argparse, time, re, logging, subprocess, shutil, base64, urllib.parse
-
-#logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(process)s] [%(levelname)s] %(message)s")
-#logg = logging.getLogger(__name__)
-
+import os, sys, socket, threading, ssl, select, json, argparse, time, re, logging, shutil, base64, urllib.parse, subprocess
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -15,11 +11,10 @@ logging.basicConfig(
 )
 logg = logging.getLogger(__name__)
 
-
+# ---------------- CONSTANTS ----------------
 BACKLOG = 50
 MAX_CHUNK_SIZE = 16*1024
 BLACKLISTED = []
-
 AUTH_USERS = {}
 AUTH_FILE_PATH = None
 
@@ -89,7 +84,7 @@ def check_manager_auth(headers: dict) -> str:
         pass
     return None
 
-# ---------------- REQUEST ----------------
+# ---------------- REQUEST PARSING ----------------
 class Request:
     def __init__(self, raw: bytes):
         self.raw = raw
@@ -136,16 +131,14 @@ def parse_post_body(raw: bytes):
     except Exception:
         return {}
 
-# ---------------- MANAGER ----------------
+# ---------------- MANAGER PAGE ----------------
 def manager_page():
-    # Charge le HTML
     try:
         with open("manager.html","r",encoding="utf-8") as f:
             html_template = f.read()
     except Exception:
         return b"HTTP/1.1 500 Internal Server Error\r\n\r\nErreur lecture manager.html"
 
-    # Injecte les utilisateurs
     rows=""
     for user,info in sorted(AUTH_USERS.items()):
         checked = "checked" if info.get("admin") else ""
@@ -168,13 +161,11 @@ def manager_page():
         </tr>
         """
 
-    # Lit les logs depuis un fichier
     log_text=""
-    log_file="proxy.log"  # même fichier où logging écrit
+    log_file="proxy.log"
     if os.path.exists(log_file):
         try:
             with open(log_file,"r",encoding="utf-8",errors="ignore") as f:
-                # On prend les dernières 100 lignes
                 log_text = "".join(f.readlines()[-100:])
         except Exception:
             log_text="Erreur lecture du fichier de logs"
@@ -278,24 +269,39 @@ class ConnectionHandle(threading.Thread):
             if req.method.upper()=="CONNECT":
                 self.client_conn.send(StaticResponse.connection_established)
             else:
-                server_conn.send(rawreq)
+                server_conn.sendall(rawreq)
 
+            # --- Relay loop avec debug complet (serveur + port + URL) ---
             while True:
-                ready=select.select([self.client_conn,server_conn],[],[],60)[0]
+                ready = select.select([self.client_conn, server_conn], [], [], 60)[0]
                 if not ready: break
+
+                url = f"{req.host}:{req.port}{req.path}" if req.path else f"{req.host}:{req.port}"
+
                 if self.client_conn in ready:
-                    data=self.client_conn.recv(MAX_CHUNK_SIZE)
+                    data = self.client_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
-                    server_conn.send(data)
+                    server_conn.sendall(data)
+                    if self.debug:
+                        logg.info(f"[{self.client_addr}] C->S {req.method} {url} {len(data)} bytes")
+                    else:
+                        logg.info(f"[{self.client_addr}] C->S {url}")
+
                 if server_conn in ready:
-                    data=server_conn.recv(MAX_CHUNK_SIZE)
+                    data = server_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
-                    self.client_conn.send(data)
+                    self.client_conn.sendall(data)
+                    if self.debug:
+                        logg.info(f"[{self.client_addr}] S->C {req.method} {url} {len(data)} bytes")
+                    else:
+                        logg.info(f"[{self.client_addr}] S->C {url}")
 
         except Exception as e:
             logg.exception(f"[{self.client_addr}] error: {e}")
         finally:
             try: self.client_conn.close()
+            except: pass
+            try: server_conn.close()
             except: pass
 
 # ---------------- PROXY SERVER ----------------
@@ -334,6 +340,7 @@ def main():
     parser.add_argument("--certbot-domain")
     parser.add_argument("--auth-file")
     parser.add_argument("--no-auth",action="store_true")
+    parser.add_argument("--debug-http",action="store_true",help="Enable HTTP debug logging")
     args=parser.parse_args()
 
     if args.no_auth:
@@ -358,10 +365,10 @@ def main():
         logg.info("TLS enabled")
 
     # start HTTP
-    threading.Thread(target=lambda: ProxyServer(args.host,args.http_port).start(),daemon=True).start()
+    threading.Thread(target=lambda: ProxyServer(args.host,args.http_port,debug=args.debug_http).start(),daemon=True).start()
     # start TLS
     if args.tls:
-        ProxyServer(args.host,args.tls_port,tls_ctx=tls_ctx).start()
+        ProxyServer(args.host,args.tls_port,tls_ctx=tls_ctx,debug=args.debug_http).start()
     else:
         while True: time.sleep(3600)
 
