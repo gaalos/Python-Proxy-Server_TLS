@@ -1,5 +1,4 @@
-
-import os, sys, socket, threading, ssl, select, json, argparse, time, re, logging, subprocess, shutil, base64, urllib.parse
+import os, sys, socket, threading, ssl, select, json, argparse, time, re, logging, shutil, base64, urllib.parse, subprocess
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(
@@ -268,11 +267,13 @@ class ConnectionHandle(threading.Thread):
                 return
 
             if req.method.upper()=="CONNECT":
+                # Auth déjà validée => envoyer 200 Connection Established
                 self.client_conn.send(StaticResponse.connection_established)
+
             else:
                 server_conn.send(rawreq)
 
-            # --- Relay loop avec debug HTTP ---
+            # --- Relay loop TLS-safe ---
             while True:
                 ready=select.select([self.client_conn,server_conn],[],[],60)[0]
                 if not ready: break
@@ -280,39 +281,23 @@ class ConnectionHandle(threading.Thread):
                 if self.client_conn in ready:
                     data=self.client_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
-                    server_conn.send(data)
-
+                    server_conn.sendall(data)
                     if self.debug:
-                        if req.method.upper()=="CONNECT":
-                            logg.info(f"[{self.client_addr}] C->S CONNECT {req.host}:{req.port} {len(data)} bytes")
-                        else:
-                            try:
-                                lines = data.decode(errors="ignore").split("\r\n")
-                                request_line = lines[0] if lines else ""
-                                logg.info(f"[{self.client_addr}] C->S {request_line} {len(data)} bytes")
-                            except Exception:
-                                logg.info(f"[{self.client_addr}] C->S {len(data)} bytes (non-decoded)")
+                        logg.info(f"[{self.client_addr}] C->S {len(data)} bytes")
 
                 if server_conn in ready:
                     data=server_conn.recv(MAX_CHUNK_SIZE)
                     if not data: break
-                    self.client_conn.send(data)
-
+                    self.client_conn.sendall(data)
                     if self.debug:
-                        if req.method.upper()=="CONNECT":
-                            logg.info(f"[{self.client_addr}] S->C CONNECT {req.host}:{req.port} {len(data)} bytes")
-                        else:
-                            try:
-                                lines = data.decode(errors="ignore").split("\r\n")
-                                status_line = lines[0] if lines else ""
-                                logg.info(f"[{self.client_addr}] S->C {status_line} {len(data)} bytes")
-                            except Exception:
-                                logg.info(f"[{self.client_addr}] S->C {len(data)} bytes (non-decoded)")
+                        logg.info(f"[{self.client_addr}] S->C {len(data)} bytes")
 
         except Exception as e:
             logg.exception(f"[{self.client_addr}] error: {e}")
         finally:
             try: self.client_conn.close()
+            except: pass
+            try: server_conn.close()
             except: pass
 
 # ---------------- PROXY SERVER ----------------
@@ -383,4 +368,5 @@ def main():
     else:
         while True: time.sleep(3600)
 
-if __name__=="
+if __name__=="__main__":
+    main()
